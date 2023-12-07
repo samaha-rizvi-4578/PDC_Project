@@ -85,17 +85,25 @@ int main(int argc, char** argv) {
 
     Point* generated_points = generate_points(n);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    double scatter_start_time = MPI_Wtime();
+
     // Scatter the points to all processes
     Point* local_points = (Point*)malloc((n / world_size) * sizeof(Point));
     MPI_Scatter(generated_points, n / world_size, MPI_2INT, local_points, n / world_size, MPI_2INT, 0, MPI_COMM_WORLD);
 
+    double scatter_end_time = MPI_Wtime();
+
     write_points_to_file(local_points, n / world_size, rank);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double start_time = MPI_Wtime();
+    double computation_start_time = MPI_Wtime();
 
     int closest_pair_index1, closest_pair_index2;
     find_shortest_distance(local_points, n / world_size, &closest_pair_index1, &closest_pair_index2);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    double computation_end_time = MPI_Wtime();
 
     // Gather the closest pair indices from all processes to rank 0
     int* all_indices = (int*)malloc(2 * world_size * sizeof(int));
@@ -128,15 +136,24 @@ int main(int argc, char** argv) {
     MPI_Bcast(&final_closest_pair_index2, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double end_time = MPI_Wtime();
-    double cpu_time_used = end_time - start_time;
+    double gather_start_time = MPI_Wtime();
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    double gather_end_time = MPI_Wtime();
+
+    double scatter_time = scatter_end_time - scatter_start_time;
+    double computation_time = computation_end_time - computation_start_time;
+    double gather_time = gather_end_time - gather_start_time;
+    double total_time = gather_end_time - scatter_start_time;
 
     if (rank == 0) {
         printf("Shortest distance between points: %.2f\n", shortest_distance);
         printf("Closest pair of points: (%d, %d) and (%d, %d)\n",
                generated_points[final_closest_pair_index1].x, generated_points[final_closest_pair_index1].y,
                generated_points[final_closest_pair_index2].x, generated_points[final_closest_pair_index2].y);
-        printf("Time taken to calculate the shortest distance: %.6f seconds\n", cpu_time_used);
+        printf("Computation Time: %.6f seconds\n", computation_time);
+        printf("Communication Time (Scatter + Gather): %.6f seconds\n", scatter_time + gather_time);
+        printf("Total Time: %.6f seconds\n", total_time);
     }
 
     free(generated_points);
