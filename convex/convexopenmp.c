@@ -1,95 +1,98 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <math.h>
 #include <omp.h>
+#include <time.h>
 
 typedef struct {
-    int x, y;
+    int x;
+    int y;
 } Point;
 
+double calculate_distance(Point p1, Point p2) {
+    double dx = p1.x - p2.x;
+    double dy = p1.y - p2.y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+Point* generate_points(int n) {
+    Point* points = (Point*)malloc(n * sizeof(Point));
+
+    for (int i = 0; i < n; ++i) {
+        points[i].x = rand() % n + 1;
+        points[i].y = rand() % n + 1;
+    }
+
+    return points;
+}
+
+// Check if three points make a clockwise turn
 int orientation(Point p, Point q, Point r) {
     int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
     if (val == 0) return 0; // colinear
     return (val > 0) ? 1 : 2; // clock or counterclockwise
 }
 
-void convexHull(Point points[], int n) {
-    if (n < 3) return;
+// Check if point q is on the left side of the line formed by p and r
+int on_left_side(Point p, Point q, Point r) {
+    return orientation(p, q, r) == 2;
+}
 
-    int hullSize = 0;
-    Point *hull = malloc(n * sizeof(Point));
-    if (hull == NULL) {
-        perror("Memory allocation error");
-        exit(EXIT_FAILURE);
+int count_convex_hull_points(Point* points, int n) {
+    if (n < 3) {
+        printf("Convex hull not possible with less than 3 points.\n");
+        return 0;
     }
 
-    int leftmost = 0;
-    for (int i = 1; i < n; i++)
-        if (points[i].x < points[leftmost].x)
-            leftmost = i;
+    int convexHullCount = 0;
 
-    int p = leftmost, q;
-    do {
-        hull[hullSize++] = points[p];
+    double start_time = omp_get_wtime();
 
-        q = (p + 1) % n;
-        #pragma omp parallel for
-        for (int i = 0; i < n; i++) {
-            if (orientation(points[p], points[i], points[q]) == 2) {
-                #pragma omp critical
-                {
-                    q = i;
+    #pragma omp parallel for reduction(+:convexHullCount) schedule(dynamic)
+    for (int i = 0; i < n - 2; ++i) {
+        for (int j = i + 1; j < n - 1; ++j) {
+            for (int k = j + 1; k < n; ++k) {
+                int is_convex = 1;
+
+                #pragma omp parallel for
+                for (int m = 0; m < n; ++m) {
+                    if (m != i && m != j && m != k) {
+                        if (on_left_side(points[i], points[j], points[k]) !=
+                            on_left_side(points[i], points[j], points[m])) {
+                            is_convex = 0;
+                            
+                        }
+                    }
+                }
+
+                if (is_convex) {
+                    convexHullCount++;
                 }
             }
         }
-
-        p = q;
-    } while (p != leftmost);
-
-    printf("Convex Hull Points:\n");
-    #pragma omp parallel for
-    for (int i = 0; i < hullSize; i++) {
-        #pragma omp critical
-        {
-            printf("(%d, %d)\n", hull[i].x, hull[i].y);
-        }
     }
 
-    free(hull);  // Don't forget to free the allocated memory
+    double end_time = omp_get_wtime();
+    double cpu_time_used = end_time - start_time;
+
+    printf("Number of points in the convex hull: %d\n", convexHullCount);
+    printf("Computation time: %.6f seconds\n", cpu_time_used);
+
+    return convexHullCount;
 }
 
 int main() {
-    int numPoints;
+    srand(time(NULL));
 
-    printf("Enter the number of points: ");
-    scanf("%d", &numPoints);
+    int n;
+    printf("Enter the number of points (n): ");
+    scanf("%d", &n);
 
-    // Generate random points
-    Point *points = malloc(numPoints * sizeof(Point));
-    if (points == NULL) {
-        perror("Memory allocation error");
-        return EXIT_FAILURE;
-    }
+    Point* generated_points = generate_points(n);
 
-    #pragma omp parallel for
-    for (int i = 0; i < numPoints; i++) {
-        #pragma omp critical
-        {
-            points[i].x = rand() % 100;
-            points[i].y = rand() % 100;
-        }
-    }
+    int convexHullCount = count_convex_hull_points(generated_points, n);
 
-    // Measure time for convex hull calculation
-    clock_t start = clock();
-    convexHull(points, numPoints);
-    clock_t end = clock();
-
-    // Calculate the time taken
-    double timeTaken = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Time taken to calculate convex hull: %f seconds\n", timeTaken);
-
-    free(points);  // Don't forget to free the allocated memory
+    free(generated_points);
 
     return 0;
 }
