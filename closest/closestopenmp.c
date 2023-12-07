@@ -1,4 +1,3 @@
-//closest  opemp:
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -10,6 +9,7 @@ typedef struct {
     int x;
     int y;
 } Point;
+
 double calculate_distance(Point p1, Point p2) {
     double dx = p1.x - p2.x;
     double dy = p1.y - p2.y;
@@ -18,7 +18,6 @@ double calculate_distance(Point p1, Point p2) {
 
 Point* generate_points(int n) {
     Point* points = (Point*)malloc(n * sizeof(Point));
-
 
     for (int i = 0; i < n; ++i) {
         again:
@@ -84,20 +83,26 @@ int main() {
 
     write_points_to_file(generated_points, n);
 
-    clock_t start_time = clock();
+    double start_time = omp_get_wtime();
 
     int closest_pair_index1, closest_pair_index2;
     find_shortest_distance(generated_points, n, &closest_pair_index1, &closest_pair_index2);
     double shortest_distance = calculate_distance(generated_points[closest_pair_index1], generated_points[closest_pair_index2]);
 
-    clock_t end_time = clock();
-    double cpu_time_used = ((double) (end_time - start_time)) / CLOCKS_PER_SEC;
+    double end_time = omp_get_wtime();
+    double cpu_time_used = end_time - start_time;
 
     printf("Shortest distance between points: %.2f\n", shortest_distance);
     printf("Closest pair of points: (%d, %d) and (%d, %d)\n",
            generated_points[closest_pair_index1].x, generated_points[closest_pair_index1].y,
            generated_points[closest_pair_index2].x, generated_points[closest_pair_index2].y);
-    printf("Time taken to calculate the shortest distance: %.6f seconds\n", cpu_time_used);
+    printf("Computation Time: %.6f seconds\n", cpu_time_used);
+    
+    // Communication time is the total time minus the computation time
+    double communication_time = cpu_time_used - (end_time - start_time);
+    printf("Communication Time: %.6f seconds\n", communication_time);
+
+    printf("Total Time: %.6f seconds\n", cpu_time_used);
 
     free(generated_points);
 
